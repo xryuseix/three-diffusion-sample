@@ -1,7 +1,13 @@
 import * as THREE from "three";
 import ImagePixel from "./ImagePixel";
 import Stage from "./Stage";
-import { scaledSigmoid } from "./functions";
+import { scaledSigmoid, pseudoRandom } from "./functions";
+
+export type Point = {
+  x: number;
+  y: number;
+  z: number;
+};
 
 export default class Particle {
   stage: Stage;
@@ -21,10 +27,6 @@ export default class Particle {
     sleep: number;
     interval: number;
   };
-  gatherConfig: {
-    scale: number;
-    ratio: number[];
-  };
   initPositions: THREE.BufferAttribute[] = [];
 
   constructor(stage: Stage) {
@@ -33,7 +35,7 @@ export default class Particle {
       ryuseiChan1: "/girl.webp",
     };
 
-    const diffuseScale = 40.0;
+    const diffuseScale = 80.0;
     const diffusePeriod = 30;
     this.diffuseConfig = {
       scale: diffuseScale,
@@ -43,16 +45,6 @@ export default class Particle {
         .map((_, i) => scaledSigmoid(i, diffuseScale)),
       sleep: 10,
       interval: 100,
-    };
-
-    const gatherScale = 0.5;
-    this.gatherConfig = {
-      scale: 0.5,
-      ratio: new Array(this.diffuseConfig.period + 1)
-        .fill(0)
-        .map(
-          (_, i) => ((i + 1) * gatherScale) / (this.diffuseConfig.period + 1),
-        ),
     };
 
     this.initialize();
@@ -105,71 +97,79 @@ export default class Particle {
   }
 
   diffusion(diffuseCount: number) {
-    this.stage.scene.children.forEach((child: THREE.Object3D<THREE.Object3DEventMap>) => {
-      if(!(child instanceof THREE.Points)) return;
-      const position = (child as THREE.Points).geometry.attributes.position;
+    this.stage.scene.children.forEach(
+      (child: THREE.Object3D<THREE.Object3DEventMap>) => {
+        if (!(child instanceof THREE.Points)) return;
+        const position = (child as THREE.Points).geometry.attributes.position;
 
-      for (let i = 0; i < position.count; i++) {
-        const x = position.getX(i);
-        const y = position.getY(i);
-        const z = position.getZ(i);
+        for (let idx = 0; idx < position.count; idx++) {
+          const point: Point = {
+            x: position.getX(idx),
+            y: position.getY(idx),
+            z: position.getZ(idx),
+          };
 
-        const r = this.diffuseConfig.distance[diffuseCount];
-        const theta = Math.random() * Math.PI * 2;
+          const r = this.diffuseConfig.distance[diffuseCount];
+          const theta = pseudoRandom(idx, diffuseCount) * Math.PI * 2;
 
-        const newX = x + r * Math.cos(theta);
-        const newY = y + r * Math.sin(theta);
-        const newZ = z + r * Math.sin(theta);
+          const newX = point.x + r * Math.cos(theta);
+          const newY = point.y + r * Math.sin(theta);
+          const newZ = point.z + r * Math.sin(theta);
 
-        position.setXYZ(i, newX, newY, newZ);
-      }
-      position.needsUpdate = true;
-    })
+          position.setXYZ(idx, newX, newY, newZ);
+        }
+        position.needsUpdate = true;
+      },
+    );
   }
 
   gather(diffuseCount: number) {
     for (let c = 0; c < this.stage.scene.children.length; c++) {
       const child = this.stage.scene.children[c];
-      if(!(child instanceof THREE.Points)) return;
+      if (!(child instanceof THREE.Points)) return;
 
       const position = (child as THREE.Points).geometry.attributes.position;
-      for (let i = 0; i < position.count; i++) {
-        const x = position.getX(i);
-        const y = position.getY(i);
-        const z = position.getZ(i);
-
-        const initX = this.initPositions[c].getX(i);
-        const initY = this.initPositions[c].getY(i);
-        const initZ = this.initPositions[c].getZ(i);
-
-        const nextP = (p: number, initP: number) => {
-          if (diffuseCount === this.diffuseConfig.period) {
-            return initP;
-          }
-          const distance = Math.abs(p - initP);
-          const diff = distance * this.gatherConfig.ratio[diffuseCount];
-          if (p - initP > 0) {
-            return p - diff;
-          } else {
-            return p + diff;
-          }
+      for (let idx = 0; idx < position.count; idx++) {
+        const point: Point = {
+          x: position.getX(idx),
+          y: position.getY(idx),
+          z: position.getZ(idx),
         };
 
-        const newX = nextP(x, initX);
-        const newY = nextP(y, initY);
-        const newZ = nextP(z, initZ);
+        const nextP = (p: Point): Point => {
+          if (diffuseCount === this.diffuseConfig.period) {
+            return {
+              x: this.initPositions[c].getX(idx),
+              y: this.initPositions[c].getY(idx),
+              z: this.initPositions[c].getZ(idx),
+            };
+          }
 
-        position.setXYZ(i, newX, newY, newZ);
+          const prevDiffuseCount = this.diffuseConfig.period - diffuseCount;
+          const distance = this.diffuseConfig.distance[prevDiffuseCount];
+          const theta = pseudoRandom(idx, prevDiffuseCount) * Math.PI * 2;
+
+          return {
+            x: p.x - distance * Math.cos(theta),
+            y: p.y - distance * Math.sin(theta),
+            z: p.z - distance * Math.sin(theta),
+          };
+        };
+
+        const { x: newX, y: newY, z: newZ } = nextP(point);
+        position.setXYZ(idx, newX, newY, newZ);
       }
       position.needsUpdate = true;
     }
   }
 
   setAutoPlay() {
-    this.initPositions = this.stage.scene.children.flatMap((child) => {
-      if(!(child instanceof THREE.Points)) return []
-      return [child.geometry.attributes.position.clone()];
-    }).filter((v) => v !== undefined) as THREE.BufferAttribute[];
+    this.initPositions = this.stage.scene.children
+      .flatMap((child) => {
+        if (!(child instanceof THREE.Points)) return [];
+        return [child.geometry.attributes.position.clone()];
+      })
+      .filter((v) => v !== undefined) as THREE.BufferAttribute[];
     let diffuseCount = 0;
     let isDiffuse = true;
     let isDiffuseChanged = false;
@@ -200,7 +200,7 @@ export default class Particle {
 
   _render() {
     for (let child of this.stage.scene.children) {
-      if(!(child instanceof THREE.Points)) continue;
+      if (!(child instanceof THREE.Points)) continue;
       child.material.time += 0.01;
     }
   }

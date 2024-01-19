@@ -5,7 +5,7 @@ import "./App.css";
 function App() {
   useEffect(() => {
     new WebGL();
-  }, [])
+  }, []);
 
   return (
     <>

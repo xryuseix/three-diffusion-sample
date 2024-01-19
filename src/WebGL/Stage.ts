@@ -51,8 +51,10 @@ export default class Stage {
     renderer.setSize(this.renderParam.width, this.renderParam.height);
 
     const wrapper = document.querySelector("#webgl");
-    if(!wrapper) {
-      throw new Error("WebGL wrapper is not found. Is you used React? Then, you should use 'useEffect' hook.");
+    if (!wrapper) {
+      throw new Error(
+        "WebGL wrapper is not found. Is you used React? Then, you should use 'useEffect' hook.",
+      );
     }
     wrapper.appendChild(renderer.domElement);
 
