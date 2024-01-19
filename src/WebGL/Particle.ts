@@ -1,34 +1,64 @@
 import * as THREE from "three";
 import ImagePixel from "./ImagePixel";
+import Stage from "./Stage";
+import { scaledSigmoid } from "./functions";
 
 export default class Particle {
-  constructor(stage) {
+  stage: Stage;
+  promiseList: Promise<void>[] = [];
+  pathList: { [key: string]: string };
+  imageList: {
+    [key: string]: {
+      position: number[];
+      color: number[];
+      alpha: number[];
+    };
+  } = {};
+  diffuseConfig: {
+    scale: number;
+    period: number;
+    distance: number[];
+    sleep: number;
+    interval: number;
+  };
+  gatherConfig: {
+    scale: number;
+    ratio: number[];
+  };
+  initPositions: THREE.BufferAttribute[] = [];
+
+  constructor(stage: Stage) {
     this.stage = stage;
-    this.promiseList = [];
     this.pathList = {
       ryuseiChan1: "/girl.webp",
     };
-    this.imageList = {};
 
-    this.diffuseScale = 40.0;
-    this.sigmoid = (x) =>
-      this.diffuseScale / (1 + Math.exp(-x) * this.diffuseScale);
-    this.diffusePeriod = 30;
-    this.diffuseDistance = new Array(this.diffusePeriod + 1)
-      .fill(0)
-      .map((_, i) => this.sigmoid(i));
+    const diffuseScale = 40.0;
+    const diffusePeriod = 30;
+    this.diffuseConfig = {
+      scale: diffuseScale,
+      period: diffusePeriod,
+      distance: new Array(diffusePeriod + 1)
+        .fill(0)
+        .map((_, i) => scaledSigmoid(i, diffuseScale)),
+      sleep: 10,
+      interval: 100,
+    };
 
-    this.gatherScale = 0.5;
-    this.gatherRatio = new Array(this.diffusePeriod + 1)
-      .fill(0)
-      .map((_, i) => ((i + 1) * this.gatherScale) / (this.diffusePeriod + 1));
+    const gatherScale = 0.5;
+    this.gatherConfig = {
+      scale: 0.5,
+      ratio: new Array(this.diffuseConfig.period + 1)
+        .fill(0)
+        .map(
+          (_, i) => ((i + 1) * gatherScale) / (this.diffuseConfig.period + 1),
+        ),
+    };
 
-    this.diffuseSleep = 10;
-    this.diffuseInterval = 100;
-    this.noiseRatio = 0.7;
+    this.initialize();
   }
 
-  init() {
+  initialize() {
     Object.entries(this.pathList).forEach(([key, imagePath]) => {
       this.promiseList.push(
         new Promise((resolve) => {
@@ -37,15 +67,18 @@ export default class Particle {
           img.crossOrigin = "anonymous";
 
           img.addEventListener("load", () => {
-            this.imageList[key] = ImagePixel(img, img.width, img.height, 5.0);
+            const imagePixel = ImagePixel(img, img.width, img.height, 5.0);
+            if (imagePixel) {
+              this.imageList[key] = imagePixel;
+            }
             resolve();
           });
-        })
+        }),
       );
     });
     Promise.all(this.promiseList).then(() => {
       this.createParticles();
-      this._setAutoPlay();
+      this.setAutoPlay();
     });
   }
 
@@ -71,16 +104,17 @@ export default class Particle {
     });
   }
 
-  _setDiffusion(diffuseCount) {
-    for (let child of this.stage.scene.children) {
-      const position = child.geometry.attributes.position;
+  diffusion(diffuseCount: number) {
+    this.stage.scene.children.forEach((child: THREE.Object3D<THREE.Object3DEventMap>) => {
+      if(!(child instanceof THREE.Points)) return;
+      const position = (child as THREE.Points).geometry.attributes.position;
 
       for (let i = 0; i < position.count; i++) {
         const x = position.getX(i);
         const y = position.getY(i);
         const z = position.getZ(i);
 
-        const r = this.diffuseDistance[diffuseCount];
+        const r = this.diffuseConfig.distance[diffuseCount];
         const theta = Math.random() * Math.PI * 2;
 
         const newX = x + r * Math.cos(theta);
@@ -90,14 +124,15 @@ export default class Particle {
         position.setXYZ(i, newX, newY, newZ);
       }
       position.needsUpdate = true;
-    }
+    })
   }
 
-  _setGather(diffuseCount) {
+  gather(diffuseCount: number) {
     for (let c = 0; c < this.stage.scene.children.length; c++) {
       const child = this.stage.scene.children[c];
-      const position = child.geometry.attributes.position;
+      if(!(child instanceof THREE.Points)) return;
 
+      const position = (child as THREE.Points).geometry.attributes.position;
       for (let i = 0; i < position.count; i++) {
         const x = position.getX(i);
         const y = position.getY(i);
@@ -107,16 +142,16 @@ export default class Particle {
         const initY = this.initPositions[c].getY(i);
         const initZ = this.initPositions[c].getZ(i);
 
-        const nextP = (p, initP) => {
-          if (diffuseCount === this.diffusePeriod) {
+        const nextP = (p: number, initP: number) => {
+          if (diffuseCount === this.diffuseConfig.period) {
             return initP;
           }
           const distance = Math.abs(p - initP);
-          const diff = distance * this.gatherRatio[diffuseCount];
+          const diff = distance * this.gatherConfig.ratio[diffuseCount];
           if (p - initP > 0) {
-            return p - diff
+            return p - diff;
           } else {
-            return p + diff
+            return p + diff;
           }
         };
 
@@ -130,47 +165,47 @@ export default class Particle {
     }
   }
 
-  _setAutoPlay() {
-    this.initPositions = this.stage.scene.children.map((child) => {
-      return child.geometry.attributes.position.clone();
-    });
+  setAutoPlay() {
+    this.initPositions = this.stage.scene.children.flatMap((child) => {
+      if(!(child instanceof THREE.Points)) return []
+      return [child.geometry.attributes.position.clone()];
+    }).filter((v) => v !== undefined) as THREE.BufferAttribute[];
     let diffuseCount = 0;
     let isDiffuse = true;
     let isDiffuseChanged = false;
 
     setInterval(() => {
-      if (diffuseCount > this.diffusePeriod && !isDiffuseChanged) {
+      if (diffuseCount > this.diffuseConfig.period && !isDiffuseChanged) {
         isDiffuse = !isDiffuse;
         isDiffuseChanged = true;
       }
-      if (diffuseCount > this.diffusePeriod && !isDiffuse) {
+      if (diffuseCount > this.diffuseConfig.period && !isDiffuse) {
         diffuseCount = 0;
         isDiffuseChanged = false;
       }
-      if (diffuseCount > this.diffusePeriod + this.diffuseSleep) {
+      if (diffuseCount > this.diffuseConfig.period + this.diffuseConfig.sleep) {
         diffuseCount = 0;
         isDiffuseChanged = false;
       }
-      if (diffuseCount <= this.diffusePeriod) {
+      if (diffuseCount <= this.diffuseConfig.period) {
         if (isDiffuse) {
-          this._setDiffusion(diffuseCount);
+          this.diffusion(diffuseCount);
         } else {
-          this._setGather(diffuseCount);
+          this.gather(diffuseCount);
         }
       }
       diffuseCount++;
-    }, this.diffuseInterval);
+    }, this.diffuseConfig.interval);
   }
 
   _render() {
     for (let child of this.stage.scene.children) {
+      if(!(child instanceof THREE.Points)) continue;
       child.material.time += 0.01;
     }
   }
 
   onResize() {
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
     this.stage.onResize();
   }
 
@@ -178,4 +213,3 @@ export default class Particle {
     this._render();
   }
 }
-

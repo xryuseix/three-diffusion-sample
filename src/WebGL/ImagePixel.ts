@@ -1,6 +1,13 @@
-export default function ImagePixel(path, w, h, ratio) {
+export default function ImagePixel(
+  path: CanvasImageSource,
+  w: number,
+  h: number,
+  ratio: number,
+) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
   const width = w;
   const height = h;
   canvas.width = width;

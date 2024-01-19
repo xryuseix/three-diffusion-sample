@@ -1,16 +1,12 @@
-import Stage from "./Stage.js";
-import Particle from "./Particle.js";
+import Stage from "./Stage";
+import Particle from "./Particle";
 
-export class Webgl {
+export class WebGL {
   constructor() {
     const stage = new Stage();
-    stage.init();
-
     const particle = new Particle(stage);
-    particle.init();
 
     window.addEventListener("resize", () => {
-      stage.onResize();
       particle.onResize();
     });
 
