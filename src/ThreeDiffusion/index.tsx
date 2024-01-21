@@ -1,9 +1,11 @@
+import { useEffect, useRef } from "react";
 import Stage from "./Stage";
 import Particle from "./Particle";
 
-export class WebGL {
-  constructor() {
-    const stage = new Stage();
+export const ThreeDiffusion = () => {
+  const webGLWRapper = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const stage = new Stage({wrapper: webGLWRapper});
     const particle = new Particle(stage);
 
     window.addEventListener("resize", () => {
@@ -19,5 +21,7 @@ export class WebGL {
       });
     };
     _raf();
-  }
-}
+  }, []);
+
+  return <div id="WebGL" ref={webGLWRapper}></div>;
+};

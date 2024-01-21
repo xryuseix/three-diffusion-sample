@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RefObject } from "react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 export default class Stage {
@@ -21,8 +22,10 @@ export default class Stage {
   renderer: THREE.WebGLRenderer;
   orbitControls: OrbitControls;
   isDev: boolean = false;
+  wrapper: RefObject<HTMLDivElement>
 
-  constructor() {
+  constructor(params: {wrapper: RefObject<HTMLDivElement>}) {
+    this.wrapper = params.wrapper;
     this.renderParam = {
       clearColor: 0x000000,
       width: window.innerWidth,
@@ -50,14 +53,13 @@ export default class Stage {
     renderer.setClearColor(new THREE.Color(this.renderParam.clearColor));
     renderer.setSize(this.renderParam.width, this.renderParam.height);
 
-    const wrapper = document.querySelector("#webgl");
-    if (!wrapper) {
+    if (!this.wrapper.current) {
       throw new Error(
         "WebGL wrapper is not found. Is you used React? Then, you should use 'useEffect' hook.",
       );
     }
-    wrapper.appendChild(renderer.domElement);
-
+    this.wrapper.current?.appendChild(renderer.domElement);
+    
     return renderer;
   }
 

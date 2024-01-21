@@ -1,16 +1,9 @@
-import { useEffect } from "react";
-import { WebGL } from "./WebGL";
+import { ThreeDiffusion } from "./ThreeDiffusion"
 import "./App.css";
 
 function App() {
-  useEffect(() => {
-    new WebGL();
-  }, []);
-
   return (
-    <>
-      <div id="webgl"></div>
-    </>
+    <ThreeDiffusion />
   );
 }
 
