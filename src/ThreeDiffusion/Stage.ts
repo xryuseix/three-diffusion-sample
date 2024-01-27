@@ -22,9 +22,9 @@ export default class Stage {
   renderer: THREE.WebGLRenderer;
   orbitControls: OrbitControls;
   isDev: boolean = false;
-  wrapper: RefObject<HTMLDivElement>
+  wrapper: RefObject<HTMLDivElement>;
 
-  constructor(params: {wrapper: RefObject<HTMLDivElement>}) {
+  constructor(params: { wrapper: RefObject<HTMLDivElement> }) {
     this.wrapper = params.wrapper;
     this.renderParam = {
       clearColor: 0x000000,
@@ -47,6 +47,12 @@ export default class Stage {
     this.orbitControls = this.setupControls();
   }
 
+  componentDidUpdate(prevProps) {
+    if (prevProps.wrapper !== this.wrapper && this.wrapper.current) {
+      this.setupRender();
+    }
+  }
+
   setupRender() {
     const renderer = new THREE.WebGLRenderer();
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -58,8 +64,8 @@ export default class Stage {
         "WebGL wrapper is not found. Is you used React? Then, you should use 'useEffect' hook.",
       );
     }
-    this.wrapper.current?.appendChild(renderer.domElement);
-    
+    this.wrapper.current.appendChild(renderer.domElement);
+
     return renderer;
   }
 

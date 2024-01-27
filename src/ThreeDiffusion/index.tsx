@@ -1,27 +1,70 @@
-import { useEffect, useRef } from "react";
+import React, { useEffect, createRef } from "react";
 import Stage from "./Stage";
 import Particle from "./Particle";
 
-export const ThreeDiffusion = () => {
-  const webGLWRapper = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const stage = new Stage({wrapper: webGLWRapper});
-    const particle = new Particle(stage);
-
-    window.addEventListener("resize", () => {
-      particle.onResize();
-    });
-
-    const _raf = () => {
-      window.requestAnimationFrame(() => {
-        _raf();
-
-        stage.onRaf();
-        particle.onRaf();
-      });
-    };
-    _raf();
-  }, []);
-
-  return <div id="WebGL" ref={webGLWRapper}></div>;
+type Props = {
+  period: number;
 };
+
+export class ThreeDiffusion extends React.Component<Props> {
+  state: {
+    step: number;
+    ref: React.RefObject<HTMLDivElement>;
+    period: number;
+    stage: Stage | undefined;
+    particle: Particle | undefined;
+  };
+  constructor(props: Props) {
+    super(props);
+    this.state = {
+      step: 0,
+      ref: createRef(),
+      period: props.period,
+      stage: undefined,
+      particle: undefined,
+    };
+  }
+  progress = () => {
+    return this.state.particle?.progress();
+  };
+  regress = () => {
+    return this.state.particle?.regress();
+  };
+  reset = () => {
+    return this.state.particle?.reset();
+  };
+  componentDidMount() {
+    this.setState({
+      stage: new Stage({ wrapper: this.state.ref }),
+    });
+  }
+  componentDidUpdate(_prevProps: Props, prevState: typeof this.state) {
+    if (prevState.stage !== this.state.stage) {
+      if (this.state.stage && !this.state.particle) {
+        this.setState({
+          particle: new Particle({
+            stage: this.state.stage,
+            period: this.state.period,
+          }),
+        });
+      }
+    }
+  }
+
+  private _raf = () => {
+    window.requestAnimationFrame(() => {
+      this._raf();
+
+      this.state.stage?.onRaf();
+      this.state.particle?.onRaf();
+    });
+  };
+
+  render() {
+    this._raf();
+    window.addEventListener("resize", () => {
+      this.state.particle?.onResize();
+    });
+    return <div id="WebGL" ref={this.state.ref} />;
+  }
+}
