@@ -218,13 +218,12 @@ export default class Particle {
 
   regress() {
     this.step = periodNormalize(this.step, this.diffuseConfig.period * 2);
+    if(this.step === 0) {
+      console.warn("[WARNING] image pixel is initialized, so you can't regress anymore.")
+      return this.step;
+    }
     this.onStepChange();
     this.step--;
-    if (this.step > 0) {
-    } else {
-      this.onStepChange();
-      this.step = this.diffuseConfig.period * 2 - 1;
-    }
     return this.step;
   }
 
