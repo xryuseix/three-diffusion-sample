@@ -38,7 +38,7 @@ export default class Stage {
       lookAt: new THREE.Vector3(0, 0, 0),
       x: 0,
       y: 0,
-      z: 1000,
+      z: 1500,
     };
 
     this.scene = new THREE.Scene();

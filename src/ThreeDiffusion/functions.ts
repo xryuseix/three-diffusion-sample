@@ -9,3 +9,6 @@ export const pseudoRandom = (pointIdx: number, step: number) => {
 export const periodNormalize = (num: number, mod: number) => {
   return ((num % mod) + mod) % mod;
 };
+
+export const getDifferences = (array: number[]) =>
+  array.slice(1).map((val, i) => val - array[i]);
