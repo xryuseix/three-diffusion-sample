@@ -47,7 +47,7 @@ export default class Stage {
     this.orbitControls = this.setupControls();
   }
 
-  componentDidUpdate(prevProps) {
+  componentDidUpdate(prevProps: { wrapper: RefObject<HTMLDivElement> }) {
     if (prevProps.wrapper !== this.wrapper && this.wrapper.current) {
       this.setupRender();
     }

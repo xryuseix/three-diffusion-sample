@@ -1,4 +1,4 @@
-import React, { useEffect, createRef } from "react";
+import React, { createRef } from "react";
 import Stage from "./Stage";
 import Particle from "./Particle";
 
@@ -31,7 +31,13 @@ export class ThreeDiffusion extends React.Component<Props> {
     return this.state.particle?.regress();
   };
   reset = () => {
-    return this.state.particle?.reset();
+    if (!this.state.stage) return;
+    return this.setState({
+      particle: new Particle({
+        stage: this.state.stage,
+        period: this.state.period,
+      }),
+    });
   };
   componentDidMount() {
     this.setState({

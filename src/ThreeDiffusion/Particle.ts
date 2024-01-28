@@ -11,22 +11,23 @@ export type Point = {
 
 type ParticleProps = {
   stage: Stage;
-  step: number;
   period: number;
 };
+
+type Image = {
+  position: number[];
+  color: number[];
+  alpha: number[];
+};
+
+type PathList = { from: string; to: string };
 
 export default class Particle {
   stage: Stage | undefined;
   step: number = 0;
   promiseList: Promise<void>[] = [];
-  pathList: { [key: string]: string };
-  imageList: {
-    [key: string]: {
-      position: number[];
-      color: number[];
-      alpha: number[];
-    };
-  } = {};
+  pathList: PathList;
+  imageList: { from?: Image; to?: Image } = {};
   diffuseConfig: {
     scale: number;
     period: number;
@@ -37,7 +38,8 @@ export default class Particle {
   constructor(params: ParticleProps) {
     this.stage = params.stage;
     this.pathList = {
-      ryuseiChan1: "/girl.webp",
+      from: "/girl.webp",
+      to: "/girl.webp",
     };
 
     const diffuseScale = 30.0;
@@ -63,21 +65,20 @@ export default class Particle {
 
   private async initialize() {
     Object.entries(this.pathList).forEach(([key, imagePath]) => {
-      this.promiseList.push(
-        new Promise((resolve) => {
-          const img = new Image();
-          img.src = imagePath;
-          img.crossOrigin = "anonymous";
+      const imagePromise = new Promise<void>((resolve) => {
+        const img = new Image();
+        img.src = imagePath;
+        img.crossOrigin = "anonymous";
 
-          img.addEventListener("load", () => {
-            const imagePixel = ImagePixel(img, img.width, img.height, 5.0);
-            if (imagePixel) {
-              this.imageList[key] = imagePixel;
-            }
-            resolve();
-          });
-        }),
-      );
+        img.addEventListener("load", () => {
+          const imagePixel = ImagePixel(img, img.width, img.height, 5.0);
+          if (imagePixel && (key === "from" || key === "to")) {
+            this.imageList[key] = imagePixel;
+          }
+          resolve();
+        });
+      });
+      this.promiseList.push(imagePromise);
     });
     return Promise.all(this.promiseList).then(() => {
       this.createParticles();
@@ -102,7 +103,7 @@ export default class Particle {
       color: 0xffffff,
     });
 
-    Object.entries(this.imageList).forEach(([_, image]) => {
+    Object.entries(this.imageList).forEach(([_key, image]) => {
       const position = new Float32Array(image.position);
       const color = new Float32Array(image.color);
       const alpha = new Float32Array(image.alpha);
@@ -117,7 +118,7 @@ export default class Particle {
   }
 
   private diffusion(diffusionCount: number) {
-    this.stage.scene.children.forEach(
+    this.stage?.scene.children.forEach(
       (child: THREE.Object3D<THREE.Object3DEventMap>) => {
         if (!(child instanceof THREE.Points)) return;
         const position = (child as THREE.Points).geometry.attributes.position;
@@ -143,6 +144,7 @@ export default class Particle {
   }
 
   private gather(diffusionCount: number) {
+    if (typeof this.stage === "undefined") return;
     for (let c = 0; c < this.stage.scene.children.length; c++) {
       const child = this.stage.scene.children[c];
       if (!(child instanceof THREE.Points)) return;
@@ -185,14 +187,13 @@ export default class Particle {
     if (this.step < this.diffuseConfig.period) {
       this.diffusion(this.step);
     } else {
-      // this.gather(this.diffuseConfig.period - this.step % this.diffuseConfig.period);
       this.gather(this.step - this.diffuseConfig.period);
     }
   }
 
   private render() {
     if (typeof this.stage === "undefined") return;
-    for (let child of this.stage.scene.children) {
+    for (const child of this.stage.scene.children) {
       if (!(child instanceof THREE.Points)) continue;
       child.material.time += 0.01;
     }
@@ -218,32 +219,14 @@ export default class Particle {
 
   regress() {
     this.step = periodNormalize(this.step, this.diffuseConfig.period * 2);
-    if(this.step === 0) {
-      console.warn("[WARNING] image pixel is initialized, so you can't regress anymore.")
+    if (this.step === 0) {
+      console.warn(
+        "[WARNING] image pixel is initialized, so you can't regress anymore.",
+      );
       return this.step;
     }
     this.onStepChange();
     this.step--;
-    return this.step;
-  }
-
-  reset() {
-    this.onStepChange();
-    this.step = 0;
-    for (let c = 0; c < this.stage.scene.children.length; c++) {
-      const child = this.stage.scene.children[c];
-      if (!(child instanceof THREE.Points)) continue;
-
-      const position = (child as THREE.Points).geometry.attributes.position;
-      for (let idx = 0; idx < position.count; idx++) {
-        child.geometry.attributes.position.setXYZ(
-          idx,
-          this.initPositions[c].getX(idx),
-          this.initPositions[c].getY(idx),
-          this.initPositions[c].getZ(idx),
-        );
-      }
-    }
     return this.step;
   }
 }
