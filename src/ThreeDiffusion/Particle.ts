@@ -39,7 +39,7 @@ export default class Particle {
     this.stage = params.stage;
     this.pathList = {
       from: "/girl.webp",
-      to: "/girl.webp",
+      to: "/girl2.webp",
     };
 
     const diffuseScale = 30.0;
@@ -58,16 +58,16 @@ export default class Particle {
   }
 
   componentDidUpdate(prevProps: ParticleProps) {
-    if (prevProps.stage !== this.stage && this.stage !== null) {
+    if (prevProps.stage !== this.stage && this.stage) {
       this.createParticles();
     }
   }
 
   private async initialize() {
-    Object.entries(this.pathList).forEach(([key, imagePath]) => {
-      const imagePromise = new Promise<void>((resolve) => {
+    const loadImage = (key: keyof PathList) => {
+      return new Promise<void>((resolve) => {
         const img = new Image();
-        img.src = imagePath;
+        img.src = this.pathList[key];
         img.crossOrigin = "anonymous";
 
         img.addEventListener("load", () => {
@@ -78,9 +78,8 @@ export default class Particle {
           resolve();
         });
       });
-      this.promiseList.push(imagePromise);
-    });
-    return Promise.all(this.promiseList).then(() => {
+    };
+    return Promise.all([loadImage("from"), loadImage("to")]).then(() => {
       this.createParticles();
     });
   }
@@ -100,27 +99,35 @@ export default class Particle {
     const material = new THREE.PointsMaterial({
       size: 5,
       vertexColors: true,
-      color: 0xffffff,
+      transparent: true,
     });
 
-    Object.entries(this.imageList).forEach(([_key, image]) => {
+    const addMesh = (key: keyof typeof this.imageList) => {
+      const image = this.imageList[key];
+      if (!image) return;
       const position = new Float32Array(image.position);
       const color = new Float32Array(image.color);
-      const alpha = new Float32Array(image.alpha);
+      const rgba = new Float32Array(
+        image.alpha.flatMap((alpha, i) => {
+          return [color[i * 3], color[i * 3 + 1], color[i * 3 + 2], alpha];
+        }),
+      );
 
       geometry.setAttribute("position", new THREE.BufferAttribute(position, 3));
-      geometry.setAttribute("color", new THREE.BufferAttribute(color, 3));
-      geometry.setAttribute("alpha", new THREE.BufferAttribute(alpha, 1));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(rgba, 4));
 
       const mesh = new THREE.Points(geometry, material);
       this.stage?.scene.add(mesh);
-    });
+    };
+
+    addMesh("from");
   }
 
   private diffusion(diffusionCount: number) {
     this.stage?.scene.children.forEach(
       (child: THREE.Object3D<THREE.Object3DEventMap>) => {
         if (!(child instanceof THREE.Points)) return;
+
         const position = (child as THREE.Points).geometry.attributes.position;
         const r = this.diffuseConfig.distance[diffusionCount];
         for (let idx = 0; idx < position.count; idx++) {
@@ -138,7 +145,37 @@ export default class Particle {
 
           position.setXYZ(idx, newX, newY, newZ);
         }
+
+        const color = (child as THREE.Points).geometry.attributes.color;
+        const toColor = this.imageList.to?.color;
+        for (let idx = 0; idx < color.count; idx++) {
+          const updateColor = (cur: number, final: number) => {
+            const d = Math.abs(final - cur) / this.diffuseConfig.period;
+            if (cur >= final) {
+              const next = cur - d;
+              return next < final ? final : next;
+            } else {
+              const next = cur + d;
+              return next > final ? final : next;
+            }
+          };
+          const x = updateColor(
+            color.getX(idx),
+            toColor?.[idx * 3] ?? color.getX(idx),
+          );
+          const y = updateColor(
+            color.getY(idx),
+            toColor?.[idx * 3 + 1] ?? color.getY(idx),
+          );
+          const z = updateColor(
+            color.getZ(idx),
+            toColor?.[idx * 3 + 2] ?? color.getZ(idx),
+          );
+          color.setXYZ(idx, x, y, z);
+        }
+
         position.needsUpdate = true;
+        color.needsUpdate = true;
       },
     );
   }
